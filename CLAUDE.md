@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Go library for optimizing JPEG images by removing unnecessary metadata while preserving essential information. The library uses a blacklist approach to selectively remove metadata that doesn't affect image display or quality.
+This is a Go library for optimizing PNG images by removing unnecessary metadata chunks while preserving essential information for web display. The library uses a blacklist approach to selectively remove ancillary chunks that don't affect image rendering or color accuracy.
 
 ## Build and Development Commands
 
@@ -16,7 +16,7 @@ go build ./...
 go test -v ./...
 
 # Run a specific test
-go test -v -run TestJpegMetaFitness/Remove_EXIF_thumbnail
+go test -v -run TestPngMetaWebStrip/Remove_text_chunks
 
 # Generate test coverage
 go test -coverprofile=coverage.out ./...
@@ -38,48 +38,61 @@ make clean
 
 ### Core Processing Flow
 
-The library follows a segment-based JPEG processing approach:
+The library follows a chunk-based PNG processing approach:
 
-1. **Parse JPEG Structure**: Uses `go-jpeg-image-structure` to parse JPEG into segments
-2. **Segment Processing**: Each segment is evaluated by `processSegment()` function
-3. **Selective Removal**: Segments are either kept, removed, or modified based on type
-4. **Reconstruction**: Valid segments are reassembled into a new JPEG
+1. **Parse PNG Structure**: Reads PNG signature and parses chunks sequentially
+2. **Chunk Processing**: Each chunk is evaluated by `processChunk()` function
+3. **Selective Removal**: Chunks are either kept or removed based on chunk type
+4. **Reconstruction**: Valid chunks are reassembled with proper CRC recalculation
 
 ### Key Components
 
-- **fitness.go**: Main processing logic
-  - `JpegMetaFitness()`: Entry point that orchestrates the cleaning process
-  - `processSegment()`: Evaluates each JPEG segment
-  - `processAPP1Segment()`: Handles EXIF/XMP segments specifically
-  - `cleanExifSegment()`: Modifies EXIF data to remove thumbnails, GPS, and camera info
-  - Binary EXIF parsing functions for TIFF/IFD structure manipulation
+- **webstrip.go**: Main processing logic
+  - `PngMetaWebStrip()`: Entry point that orchestrates the cleaning process
+  - `processChunk()`: Evaluates each PNG chunk
+  - `isEssentialChunk()`: Determines if a chunk should be preserved
+  - `calculateCRC()`: Recalculates CRC32 for chunk integrity
+  - Chunk type identification and filtering logic
 
 - **datacreator/**: Test data generation utility
-  - Creates 18+ different JPEG variations with various metadata combinations
+  - Creates 18+ different PNG variations with various chunk combinations
   - Uses ImageMagick for basic image operations
-  - Uses ExifTool for metadata embedding (thumbnails, GPS, XMP, IPTC)
+  - Uses pngcrush/optipng for adding specific chunks
+  - Uses ExifTool for eXIf chunk manipulation
 
-### Metadata Handling Strategy
+### Chunk Handling Strategy
 
 **Removed (Blacklist)**:
-- APP1: EXIF thumbnails (IFD1), GPS data (GPS IFD), camera info (Make/Model tags)
-- APP1: XMP data (identified by Adobe namespace header)
-- APP13: Photoshop IRB/IPTC data
-- COM: Comment markers
+- tEXt/zTXt/iTXt: Text comments and metadata
+- tIME: Last modification timestamp
+- bKGD: Background color suggestions
+- sPLT: Suggested palette entries
+- hIST: Histogram data
+- eXIf: EXIF metadata (PNG 1.6+)
+- Private/ancillary chunks
 
 **Preserved**:
-- APP1: Core EXIF data (orientation, resolution)
-- APP2: ICC color profiles
-- APP14: Adobe color transform information
-- All image data segments (SOF, DQT, DHT, SOS, SOI, EOI)
+- IHDR: Image header (critical)
+- PLTE: Palette data (critical for indexed color)
+- IDAT: Image data (critical)
+- IEND: Image trailer (critical)
+- tRNS: Transparency information
+- gAMA: Gamma correction
+- cHRM: Chromaticity coordinates
+- sRGB: sRGB color space indicator
+- iCCP: ICC color profiles
+- sBIT: Significant bits (color precision)
+- pHYs: Physical pixel dimensions (DPI)
 
-### Binary EXIF Processing
+### PNG Chunk Processing
 
-The library directly manipulates EXIF binary data:
-- Detects endianness (big/little) from TIFF header
-- Navigates IFD (Image File Directory) structures
-- Sets IFD1 offset to 0 to remove thumbnails
-- Zeros out specific tag entries for GPS/camera removal
+The library directly manipulates PNG chunk structure:
+- Reads 8-byte PNG signature validation
+- Parses chunk length (4 bytes, big-endian)
+- Identifies chunk type (4 ASCII characters)
+- Processes chunk data based on type
+- Validates/recalculates CRC32 checksums
+- Handles both critical and ancillary chunks
 
 ## Code Quality Standards
 
@@ -89,18 +102,20 @@ The project enforces strict linting via `.golangci.yml`:
 - Security scanning with gosec
 - Comprehensive static analysis
 
-When modifying EXIF parsing code, be aware of:
-- Proper endianness handling for multi-byte values
-- IFD offset calculations must account for TIFF header position
-- Tag removal by zeroing entries (not deleting) to maintain structure
+When modifying PNG chunk parsing code, be aware of:
+- All multi-byte integers are big-endian
+- CRC must be recalculated after any chunk modification
+- Critical chunks (uppercase first letter) cannot be removed
+- Chunk ordering matters: some chunks must appear before IDAT
 
 ## Testing Approach
 
-Tests verify both metadata removal and image integrity:
-- Metadata verification uses ExifTool output parsing
-- Image integrity verified via pixel data MD5 checksums
-- Test data covers edge cases (mixed metadata, ICC+thumbnail, etc.)
+Tests verify both chunk removal and image integrity:
+- Chunk verification uses pngcheck or custom chunk parser
+- Image integrity verified via pixel data CRC validation
+- Test data covers edge cases (indexed color, interlaced, various chunk combinations)
+- Validates preserved chunks remain bit-identical
 
 ## Module Naming Note
 
-The module is named `go-jpeg-meta-web-strip` in go.mod, but the package is `jpegmetafitness`. The main function is `JpegMetaFitness()` which returns `(*Result, error)`.
+The module is named `go-png-meta-web-strip` in go.mod, and the package is `pngmetawebstrip`. The main function is `PngMetaWebStrip()` which returns `([]byte, *Result, error)`.

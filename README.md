@@ -1,38 +1,42 @@
-# go-jpeg-meta-web-strip
+# go-png-meta-web-strip
 
-A Go library for optimizing JPEG images by removing unnecessary metadata while preserving essential information and image quality.
+A Go library for optimizing PNG images by removing unnecessary metadata while preserving essential information for web display.
 
 ## Features
 
-- **Selective Metadata Removal**: Removes unnecessary metadata using a blacklist approach
-- **Preservation of Essential Data**: Keeps important metadata like orientation, ICC profiles, DPI settings
+- **Selective Chunk Removal**: Removes unnecessary PNG chunks using a blacklist approach
+- **Preservation of Essential Data**: Keeps important chunks like gamma correction, color profiles, and DPI settings
 - **Image Integrity**: Ensures pixel data remains unchanged after processing
-- **High Performance**: Efficient processing with minimal memory overhead
+- **High Performance**: Efficient chunk-based processing with minimal memory overhead
 
-### Metadata Removed
+### Chunks Removed
 
-- EXIF thumbnails
-- GPS information
-- Camera information (Make, Model, Lens data)
-- Maker-specific data
-- XMP metadata
-- IPTC metadata
-- Photoshop IRB data
-- Comments
+- tEXt/zTXt/iTXt: Text metadata and comments
+- tIME: Last modification time
+- bKGD: Background color
+- sPLT: Suggested palette
+- hIST: Histogram
+- eXIf: EXIF metadata (PNG 1.6+)
+- Private/ancillary chunks
 
-### Metadata Preserved
+### Chunks Preserved
 
-- Orientation
-- ICC color profiles
-- DPI/Resolution settings
-- Color space information
-- Gamma values
-- Essential image rendering data
+- IHDR: Image header (required)
+- PLTE: Palette (required for indexed color)
+- IDAT: Image data (required)
+- IEND: Image trailer (required)
+- tRNS: Transparency information
+- gAMA: Gamma correction
+- cHRM: Chromaticity
+- sRGB: sRGB color space
+- iCCP: ICC color profiles
+- sBIT: Significant bits (color precision)
+- pHYs: Physical pixel dimensions (DPI)
 
 ## Installation
 
 ```bash
-go get github.com/ideamans/go-jpeg-meta-web-strip
+go get github.com/ideamans/go-png-meta-web-strip
 ```
 
 ## Usage
@@ -43,43 +47,42 @@ package main
 import (
     "fmt"
     "os"
-    jpegmetawebstrip "github.com/ideamans/go-jpeg-meta-web-strip"
+    pngmetawebstrip "github.com/ideamans/go-png-meta-web-strip"
 )
 
 func main() {
-    // Read JPEG file
-    jpegData, err := os.ReadFile("input.jpg")
+    // Read PNG file
+    pngData, err := os.ReadFile("input.png")
     if err != nil {
         panic(err)
     }
 
     // Remove unnecessary metadata
-    cleanedData, result, err := jpegmetawebstrip.jpegmetawebstrip(jpegData)
+    cleanedData, result, err := pngmetawebstrip.PngMetaWebStrip(pngData)
     if err != nil {
         panic(err)
     }
 
-    // Write cleaned JPEG
-    err = os.WriteFile("output.jpg", cleanedData, 0644)
+    // Write cleaned PNG
+    err = os.WriteFile("output.png", cleanedData, 0644)
     if err != nil {
         panic(err)
     }
 
     // Display results
-    fmt.Printf("Removed metadata:\n")
-    fmt.Printf("  EXIF Thumbnail: %d bytes\n", result.Removed.ExifThumbnail)
-    fmt.Printf("  GPS: %d bytes\n", result.Removed.ExifGPS)
-    fmt.Printf("  Camera Info: %d bytes\n", result.Removed.CameraInfo)
-    fmt.Printf("  XMP: %d bytes\n", result.Removed.XMP)
-    fmt.Printf("  IPTC: %d bytes\n", result.Removed.IPTC)
-    fmt.Printf("  Comments: %d bytes\n", result.Removed.Comments)
+    fmt.Printf("Removed chunks:\n")
+    fmt.Printf("  Text chunks: %d bytes\n", result.Removed.TextChunks)
+    fmt.Printf("  Time chunk: %d bytes\n", result.Removed.TimeChunk)
+    fmt.Printf("  Background: %d bytes\n", result.Removed.Background)
+    fmt.Printf("  EXIF data: %d bytes\n", result.Removed.ExifData)
+    fmt.Printf("  Other chunks: %d bytes\n", result.Removed.OtherChunks)
     fmt.Printf("Total removed: %d bytes\n", result.Total)
 }
 ```
 
 ## Test Data Generator
 
-The package includes a test data generator that creates various JPEG files with different metadata combinations.
+The package includes a test data generator that creates various PNG files with different chunk combinations.
 
 ### Usage
 
@@ -95,32 +98,33 @@ go run datacreator/cmd/main.go
 
 The following test images are generated in the `testdata` directory:
 
-| Filename                       | Description                      | Metadata                                 |
+| Filename                       | Description                      | Chunks/Metadata                          |
 | ------------------------------ | -------------------------------- | ---------------------------------------- |
-| `basic_copy.jpg`               | Basic copy of original           | Minimal metadata                         |
-| `with_exif_thumbnail.jpg`      | JPEG with EXIF thumbnail         | 160x120 thumbnail embedded               |
-| `with_gps.jpg`                 | JPEG with GPS data               | GPS coordinates                          |
-| `with_camera_info.jpg`         | JPEG with camera information     | Make, Model tags                         |
-| `with_xmp.jpg`                 | JPEG with XMP metadata           | Creator, creation date, etc.             |
-| `with_iptc.jpg`                | JPEG with IPTC metadata          | Caption, keywords, copyright             |
-| `with_photoshop_irb.jpg`       | JPEG with Photoshop IRB          | Photoshop-specific data                  |
-| `with_comment.jpg`             | JPEG with comment                | Text comment                             |
-| `with_orientation.jpg`         | JPEG with orientation            | 90° rotation (preserved)                 |
-| `with_icc_profile_srgb.jpg`    | JPEG with sRGB ICC profile       | Color profile (preserved)                |
-| `with_icc_profile_p3.jpg`      | JPEG with Display P3 ICC profile | Color profile (preserved)                |
-| `with_dpi.jpg`                 | JPEG with DPI settings           | 300 DPI (preserved)                      |
-| `with_colorspace.jpg`          | JPEG with specific colorspace    | sRGB colorspace (preserved)              |
-| `with_gamma.jpg`               | JPEG with gamma value            | Gamma 2.2 (preserved)                    |
-| `with_quality.jpg`             | JPEG with specific quality       | Quality 95                               |
-| `with_all_removable.jpg`       | JPEG with all removable metadata | Comprehensive test                       |
-| `with_mixed_metadata.jpg`      | JPEG with mixed metadata         | Removable + preservable                  |
-| `with_comprehensive_mixed.jpg` | Comprehensive mixed metadata     | Thumbnail, GPS, camera, orientation, DPI |
-| `with_thumbnail_and_icc.jpg`   | JPEG with thumbnail and ICC      | Tests selective removal                  |
+| `basic_copy.png`               | Basic copy of original           | Minimal chunks                           |
+| `with_text_chunks.png`         | PNG with tEXt/zTXt/iTXt chunks  | Comments, keywords, metadata             |
+| `with_time.png`                | PNG with tIME chunk              | Last modification time                   |
+| `with_background.png`          | PNG with bKGD chunk              | Background color                         |
+| `with_exif.png`                | PNG with eXIf chunk              | EXIF metadata (PNG 1.6+)                 |
+| `with_histogram.png`           | PNG with hIST chunk              | Histogram data                           |
+| `with_suggested_palette.png`   | PNG with sPLT chunk              | Suggested palette                        |
+| `with_significant_bits.png`    | PNG with sBIT chunk              | Significant bits info (preserved)        |
+| `with_gamma.png`               | PNG with gAMA chunk              | Gamma 2.2 (preserved)                    |
+| `with_chromaticity.png`        | PNG with cHRM chunk              | Chromaticity (preserved)                 |
+| `with_srgb.png`                | PNG with sRGB chunk              | sRGB indicator (preserved)               |
+| `with_icc_profile.png`         | PNG with iCCP chunk              | ICC color profile (preserved)            |
+| `with_physical_dims.png`       | PNG with pHYs chunk              | 300 DPI (preserved)                      |
+| `indexed_color.png`            | PNG with PLTE chunk              | Palette (preserved)                      |
+| `with_transparency.png`        | PNG with tRNS chunk              | Transparency (preserved)                 |
+| `with_all_removable.png`       | PNG with all removable chunks   | Comprehensive test                       |
+| `with_mixed_chunks.png`        | PNG with mixed chunks            | Removable + preservable                  |
+| `with_comprehensive_mixed.png` | Comprehensive mixed chunks       | Text, time, background, gamma, DPI       |
+| `with_text_and_icc.png`        | PNG with text and ICC            | Tests selective removal                  |
 
 ### Requirements for Test Data Generation
 
 - ImageMagick (`magick` command)
-- ExifTool (`exiftool` command) - optional but recommended for comprehensive metadata
+- pngcrush or optipng - for adding specific PNG chunks
+- ExifTool (`exiftool` command) - optional for eXIf chunk manipulation
 
 ## Testing
 
@@ -132,7 +136,7 @@ go test ./...
 go test -v ./...
 
 # Run specific test
-go test -v -run Testjpegmetawebstrip
+go test -v -run TestPngMetaWebStrip
 
 # Generate coverage report
 go test -coverprofile=coverage.out ./...
@@ -143,11 +147,12 @@ go tool cover -html=coverage.out
 
 The package includes comprehensive tests:
 
-1. **Metadata Removal Tests**: Verify specific metadata types are removed
-2. **Metadata Preservation Tests**: Ensure essential metadata is preserved
+1. **Chunk Removal Tests**: Verify specific chunk types are removed
+2. **Chunk Preservation Tests**: Ensure essential chunks are preserved
 3. **Invalid Data Handling**: Test error handling for invalid inputs
-4. **Image Integrity Tests**: Verify pixel data remains unchanged using MD5 checksums
-5. **Comprehensive Tests**: Mixed metadata scenarios
+4. **Image Integrity Tests**: Verify pixel data remains unchanged using CRC checksums
+5. **Comprehensive Tests**: Mixed chunk scenarios
+6. **Palette Preservation**: Ensure PLTE chunks remain intact for indexed images
 
 ## Requirements
 
