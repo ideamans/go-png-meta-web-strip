@@ -2,6 +2,7 @@ package pngmetawebstrip
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/binary"
 	"fmt"
 	"image"
@@ -261,9 +262,58 @@ func verifyImageIntegrity(original, cleaned []byte) error {
 		return fmt.Errorf("image bounds differ")
 	}
 
-	// For a more thorough check, we could compare pixel by pixel
-	// but for performance reasons, we'll just check dimensions
+	// Calculate checksum of original image pixels
+	origChecksum, err := calculateImageChecksum(origImg)
+	if err != nil {
+		return fmt.Errorf("failed to calculate original checksum: %w", err)
+	}
+
+	// Calculate checksum of cleaned image pixels
+	cleanChecksum, err := calculateImageChecksum(cleanImg)
+	if err != nil {
+		return fmt.Errorf("failed to calculate cleaned checksum: %w", err)
+	}
+
+	// Compare checksums
+	if origChecksum != cleanChecksum {
+		return fmt.Errorf("image pixel data differs: original=%s, cleaned=%s", origChecksum, cleanChecksum)
+	}
+
 	return nil
+}
+
+func calculateImageChecksum(img image.Image) (string, error) {
+	bounds := img.Bounds()
+	hasher := md5.New()
+
+	// Write image dimensions to hasher
+	if err := binary.Write(hasher, binary.BigEndian, int32(bounds.Dx())); err != nil {
+		return "", err
+	}
+	if err := binary.Write(hasher, binary.BigEndian, int32(bounds.Dy())); err != nil {
+		return "", err
+	}
+
+	// Write all pixels to hasher
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			if err := binary.Write(hasher, binary.BigEndian, uint16(r)); err != nil {
+				return "", err
+			}
+			if err := binary.Write(hasher, binary.BigEndian, uint16(g)); err != nil {
+				return "", err
+			}
+			if err := binary.Write(hasher, binary.BigEndian, uint16(b)); err != nil {
+				return "", err
+			}
+			if err := binary.Write(hasher, binary.BigEndian, uint16(a)); err != nil {
+				return "", err
+			}
+		}
+	}
+
+	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
 // Integration test using external tools
@@ -405,6 +455,55 @@ func TestGenerateReport(t *testing.T) {
 			result.Total,
 			strings.Join(removedTypes, ", "))
 	}
+}
+
+// Test checksum calculation specifically
+func TestImageChecksumVerification(t *testing.T) {
+	// Load a test image with metadata
+	path := filepath.Join("testdata", "with_text_chunks.png")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t.Skip("Test file not found")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read test file: %v", err)
+	}
+
+	// Process the image
+	cleaned, _, err := PngMetaWebStrip(data)
+	if err != nil {
+		t.Fatalf("Failed to process PNG: %v", err)
+	}
+
+	// Decode both images
+	origImg, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("Failed to decode original: %v", err)
+	}
+
+	cleanImg, err := png.Decode(bytes.NewReader(cleaned))
+	if err != nil {
+		t.Fatalf("Failed to decode cleaned: %v", err)
+	}
+
+	// Calculate checksums
+	origChecksum, err := calculateImageChecksum(origImg)
+	if err != nil {
+		t.Fatalf("Failed to calculate original checksum: %v", err)
+	}
+
+	cleanChecksum, err := calculateImageChecksum(cleanImg)
+	if err != nil {
+		t.Fatalf("Failed to calculate cleaned checksum: %v", err)
+	}
+
+	// Checksums should be identical
+	if origChecksum != cleanChecksum {
+		t.Errorf("Checksums differ: original=%s, cleaned=%s", origChecksum, cleanChecksum)
+	}
+
+	t.Logf("Checksum verification successful: %s", origChecksum)
 }
 
 // Test to ensure README examples work
