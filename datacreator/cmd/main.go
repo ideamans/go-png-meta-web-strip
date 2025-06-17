@@ -35,7 +35,7 @@ func main() {
 			Filename:    "basic_copy.png",
 			Description: "Basic copy of original",
 			Commands: [][]string{
-				{"magick", "convert", filepath.Join(testDataDir, baseImage), 
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
 					"-define", "png:exclude-chunk=all",
 					"-define", "png:include-chunk=none",
 					filepath.Join(testDataDir, "basic_copy.png")},
@@ -265,7 +265,7 @@ func createBaseImage() {
 }
 
 func runCommand(args []string) error {
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.Command(args[0], args[1:]...) // #nosec G204 -- args are hardcoded in this file
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

@@ -313,7 +313,7 @@ func TestExternalValidation(t *testing.T) {
 			tmpfile.Close()
 
 			// Run pngcheck
-			cmd := exec.Command("pngcheck", "-v", tmpfile.Name())
+			cmd := exec.Command("pngcheck", "-v", tmpfile.Name()) // #nosec G204 -- pngcheck is a trusted tool
 			output, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Errorf("pngcheck failed: %v\nOutput: %s", err, output)
@@ -321,9 +321,9 @@ func TestExternalValidation(t *testing.T) {
 
 			// Check that removed chunks are not present
 			outputStr := string(output)
-			if strings.Contains(outputStr, "tEXt") || 
-			   strings.Contains(outputStr, "zTXt") || 
-			   strings.Contains(outputStr, "iTXt") {
+			if strings.Contains(outputStr, "tEXt") ||
+				strings.Contains(outputStr, "zTXt") ||
+				strings.Contains(outputStr, "iTXt") {
 				if filename == "with_text_chunks.png" {
 					t.Error("Text chunks were not removed")
 				}

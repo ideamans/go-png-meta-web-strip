@@ -29,7 +29,7 @@ func main() {
 
 		length := binary.BigEndian.Uint32(data[offset : offset+4])
 		chunkType := string(data[offset+4 : offset+8])
-		
+
 		fmt.Printf("  %s: %d bytes\n", chunkType, length)
 
 		offset += 12 + int(length)

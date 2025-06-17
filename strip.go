@@ -53,10 +53,10 @@ func PngMetaWebStrip(data []byte) ([]byte, *Result, error) {
 
 	result := &Result{}
 	output := bytes.NewBuffer(nil)
-	
+
 	// Write PNG signature
 	output.Write(pngSignature)
-	
+
 	// Process chunks
 	offset := 8
 	for offset < len(data) {
@@ -66,22 +66,22 @@ func PngMetaWebStrip(data []byte) ([]byte, *Result, error) {
 
 		// Read chunk length
 		length := binary.BigEndian.Uint32(data[offset : offset+4])
-		
+
 		if offset+12+int(length) > len(data) {
 			return nil, nil, fmt.Errorf("chunk extends beyond data at offset %d", offset)
 		}
 
 		// Read chunk type
 		chunkType := string(data[offset+4 : offset+8])
-		
+
 		// Calculate full chunk size (length + type + data + CRC)
 		fullChunkSize := 12 + int(length)
-		
+
 		// Verify CRC
 		chunkData := data[offset+4 : offset+8+int(length)]
 		crc := binary.BigEndian.Uint32(data[offset+8+int(length) : offset+12+int(length)])
 		calculatedCRC := crc32.ChecksumIEEE(chunkData)
-		
+
 		if crc != calculatedCRC {
 			return nil, nil, fmt.Errorf("invalid CRC for chunk %s at offset %d", chunkType, offset)
 		}
@@ -109,7 +109,7 @@ func shouldKeepChunk(chunkType string) bool {
 // trackRemovedChunk updates the result statistics
 func trackRemovedChunk(result *Result, chunkType string, size int) {
 	result.Total += size
-	
+
 	switch chunkType {
 	case "tEXt", "zTXt", "iTXt":
 		result.Removed.TextChunks += size
@@ -130,7 +130,7 @@ func PngMetaWebStripReader(r io.Reader) ([]byte, *Result, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read data: %w", err)
 	}
-	
+
 	return PngMetaWebStrip(data)
 }
 
@@ -140,11 +140,11 @@ func PngMetaWebStripWriter(data []byte, w io.Writer) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	_, err = w.Write(cleaned)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write data: %w", err)
 	}
-	
+
 	return result, nil
 }
