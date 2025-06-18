@@ -28,7 +28,7 @@ func TestPngMetaWebStrip(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				_, _, err := PngMetaWebStrip(tt.data)
+				_, _, err := Strip(tt.data)
 				if err == nil {
 					t.Error("Expected error for invalid data")
 				}
@@ -74,7 +74,7 @@ func TestPngMetaWebStrip(t *testing.T) {
 			}
 
 			// Process the PNG
-			cleaned, result, err := PngMetaWebStrip(data)
+			cleaned, result, err := Strip(data)
 			if err != nil {
 				t.Fatalf("Failed to process PNG: %v", err)
 			}
@@ -145,7 +145,7 @@ func TestChunkPreservation(t *testing.T) {
 				t.Fatalf("Failed to read test file: %v", err)
 			}
 
-			cleaned, _, err := PngMetaWebStrip(data)
+			cleaned, _, err := Strip(data)
 			if err != nil {
 				t.Fatalf("Failed to process PNG: %v", err)
 			}
@@ -345,7 +345,7 @@ func TestExternalValidation(t *testing.T) {
 				t.Fatalf("Failed to read test file: %v", err)
 			}
 
-			cleaned, _, err := PngMetaWebStrip(data)
+			cleaned, _, err := Strip(data)
 			if err != nil {
 				t.Fatalf("Failed to process PNG: %v", err)
 			}
@@ -392,7 +392,7 @@ func BenchmarkPngMetaWebStrip(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, err := PngMetaWebStrip(data)
+		_, _, err := Strip(data)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -425,7 +425,7 @@ func TestGenerateReport(t *testing.T) {
 			continue
 		}
 
-		cleaned, result, err := PngMetaWebStrip(data)
+		cleaned, result, err := Strip(data)
 		if err != nil {
 			fmt.Printf("%-30s | ERROR: %v\n", file.Name(), err)
 			continue
@@ -471,7 +471,7 @@ func TestImageChecksumVerification(t *testing.T) {
 	}
 
 	// Process the image
-	cleaned, _, err := PngMetaWebStrip(data)
+	cleaned, _, err := Strip(data)
 	if err != nil {
 		t.Fatalf("Failed to process PNG: %v", err)
 	}
@@ -518,7 +518,7 @@ func TestReadmeExample(t *testing.T) {
 	pngData := buf.Bytes()
 
 	// Remove unnecessary metadata
-	cleanedData, result, err := PngMetaWebStrip(pngData)
+	cleanedData, result, err := Strip(pngData)
 	if err != nil {
 		t.Fatalf("Failed to process PNG: %v", err)
 	}

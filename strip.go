@@ -39,8 +39,8 @@ var essentialChunks = map[string]bool{
 	"pHYs": true,
 }
 
-// PngMetaWebStrip removes unnecessary metadata chunks from PNG data
-func PngMetaWebStrip(data []byte) ([]byte, *Result, error) {
+// Strip removes unnecessary metadata chunks from PNG data
+func Strip(data []byte) ([]byte, *Result, error) {
 	if len(data) < 8 {
 		return nil, nil, fmt.Errorf("data too short to be a PNG")
 	}
@@ -131,12 +131,12 @@ func PngMetaWebStripReader(r io.Reader) ([]byte, *Result, error) {
 		return nil, nil, fmt.Errorf("failed to read data: %w", err)
 	}
 
-	return PngMetaWebStrip(data)
+	return Strip(data)
 }
 
 // PngMetaWebStripWriter processes PNG data and writes to a writer
 func PngMetaWebStripWriter(data []byte, w io.Writer) (*Result, error) {
-	cleaned, result, err := PngMetaWebStrip(data)
+	cleaned, result, err := Strip(data)
 	if err != nil {
 		return nil, err
 	}
