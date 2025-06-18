@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"log"
 	"os"
 	"os/exec"
@@ -233,6 +235,129 @@ func main() {
 					filepath.Join(testDataDir, "with_text_and_icc.png")},
 			},
 		},
+		// Additional test cases for improved coverage
+		{
+			Filename:    "ztxt_chunks.png",
+			Description: "PNG with zTXt compressed text chunks",
+			Commands: [][]string{
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
+					"-set", "comment", "Compressed text comment for zTXt testing",
+					"-set", "description", "This is a longer description that should be compressed in zTXt format",
+					"-define", "png:format=png8",
+					filepath.Join(testDataDir, "ztxt_chunks.png")},
+			},
+		},
+		{
+			Filename:    "multiple_idat.png",
+			Description: "PNG with multiple IDAT chunks",
+			Commands: [][]string{
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
+					"-compress", "ZIP",
+					"-quality", "95",
+					filepath.Join(testDataDir, "multiple_idat.png")},
+			},
+		},
+		{
+			Filename:    "minimal_ihdr_only.png",
+			Description: "Minimal PNG with only IHDR, IDAT, IEND",
+			Commands: [][]string{
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
+					"-strip",
+					"-define", "png:exclude-chunk=all",
+					"-define", "png:include-chunk=none",
+					filepath.Join(testDataDir, "minimal_ihdr_only.png")},
+			},
+		},
+		{
+			Filename:    "large_text_chunk.png",
+			Description: "PNG with very large text chunk",
+			Commands: [][]string{
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
+					"-set", "comment", generateLargeText(),
+					filepath.Join(testDataDir, "large_text_chunk.png")},
+			},
+		},
+		{
+			Filename:    "interlaced.png",
+			Description: "Interlaced PNG",
+			Commands: [][]string{
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
+					"-interlace", "PNG",
+					filepath.Join(testDataDir, "interlaced.png")},
+			},
+		},
+		{
+			Filename:    "grayscale_with_transparency.png",
+			Description: "Grayscale PNG with transparency",
+			Commands: [][]string{
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
+					"-colorspace", "Gray",
+					"-transparent", "white",
+					filepath.Join(testDataDir, "grayscale_with_transparency.png")},
+			},
+		},
+		{
+			Filename:    "all_essential_chunks.png",
+			Description: "PNG with all essential chunks",
+			Commands: [][]string{
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
+					"-gamma", "2.2",
+					"-colorspace", "sRGB",
+					"-density", "300",
+					"-transparent", "white",
+					"-define", "png:include-chunk=gAMA,sRGB,pHYs,tRNS",
+					filepath.Join(testDataDir, "all_essential_chunks.png")},
+			},
+		},
+		{
+			Filename:    "private_chunks.png",
+			Description: "PNG with private/unknown chunks (will be simulated)",
+			Commands: [][]string{
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
+					"-set", "comment", "Base for private chunks",
+					filepath.Join(testDataDir, "private_chunks_temp.png")},
+			},
+		},
+		{
+			Filename:    "edge_case_small.png",
+			Description: "Very small PNG for edge case testing",
+			Commands: [][]string{
+				{"magick", "convert",
+					"-size", "1x1",
+					"xc:red",
+					filepath.Join(testDataDir, "edge_case_small.png")},
+			},
+		},
+		{
+			Filename:    "high_bit_depth.png",
+			Description: "PNG with 16-bit color depth",
+			Commands: [][]string{
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
+					"-depth", "16",
+					filepath.Join(testDataDir, "high_bit_depth.png")},
+			},
+		},
+		{
+			Filename:    "comprehensive_ancillary.png",
+			Description: "PNG with all types of ancillary chunks",
+			Commands: [][]string{
+				{"magick", "convert", filepath.Join(testDataDir, baseImage),
+					"-set", "comment", "Comprehensive test",
+					"-set", "copyright", "Test Copyright",
+					"-set", "description", "All ancillary chunks test",
+					"-background", "#808080",
+					"-gamma", "2.2",
+					"-density", "300",
+					"-define", "png:include-chunk=tIME,bKGD,gAMA,pHYs,hIST,sPLT",
+					filepath.Join(testDataDir, "comprehensive_ancillary_temp.png")},
+				{"exiftool", "-overwrite_original",
+					"-Make=TestCamera",
+					"-Model=TestModel",
+					"-DateTime=2024:01:01 12:00:00",
+					filepath.Join(testDataDir, "comprehensive_ancillary_temp.png")},
+				{"mv", filepath.Join(testDataDir, "comprehensive_ancillary_temp.png"), filepath.Join(testDataDir, "comprehensive_ancillary.png")},
+			},
+		},
 	}
 
 	// Execute test cases
@@ -245,6 +370,12 @@ func main() {
 			}
 		}
 	}
+
+	// Post-process special cases
+	fmt.Println("Creating special test cases...")
+	createPrivateChunkPNG()
+	createCorruptedCRCPNG()
+	createTruncatedPNG()
 
 	fmt.Println("Test data generation complete!")
 }
@@ -269,4 +400,114 @@ func runCommand(args []string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func generateLargeText() string {
+	// Generate a large text string to test large chunk handling
+	text := "This is a test of large text chunk handling. "
+	result := ""
+	for i := 0; i < 100; i++ {
+		result += fmt.Sprintf("%s[%d] ", text, i)
+	}
+	return result
+}
+
+func createPrivateChunkPNG() {
+	// Create a PNG with a private chunk for testing unknown chunk handling
+	sourceFile := filepath.Join(testDataDir, "private_chunks_temp.png")
+	targetFile := filepath.Join(testDataDir, "private_chunks.png")
+	
+	// Read the source file
+	data, err := os.ReadFile(sourceFile)
+	if err != nil {
+		log.Printf("Warning: Failed to read source file for private chunks: %v", err)
+		return
+	}
+	
+	// Insert a private chunk (prIV) after IHDR
+	output := make([]byte, 0, len(data)+100)
+	output = append(output, data[:33]...) // PNG signature + IHDR
+	
+	// Add private chunk
+	privateData := []byte("This is a private chunk for testing")
+	output = append(output, writeChunkToBytes("prIV", privateData)...)
+	
+	// Add rest of the file
+	output = append(output, data[33:]...)
+	
+	if err := os.WriteFile(targetFile, output, 0644); err != nil {
+		log.Printf("Warning: Failed to write private chunks PNG: %v", err)
+	}
+	
+	// Clean up temp file
+	os.Remove(sourceFile)
+}
+
+func createCorruptedCRCPNG() {
+	// Create a PNG with corrupted CRC for error testing
+	sourceFile := filepath.Join(testDataDir, "basic_copy.png")
+	targetFile := filepath.Join(testDataDir, "corrupted_crc.png")
+	
+	data, err := os.ReadFile(sourceFile)
+	if err != nil {
+		log.Printf("Warning: Failed to read source file for corrupted CRC: %v", err)
+		return
+	}
+	
+	// Corrupt the CRC of the first chunk after IHDR (should be IDAT)
+	if len(data) > 50 {
+		corrupted := make([]byte, len(data))
+		copy(corrupted, data)
+		// Corrupt last byte of IHDR CRC
+		corrupted[32] = corrupted[32] ^ 0xFF
+		
+		if err := os.WriteFile(targetFile, corrupted, 0644); err != nil {
+			log.Printf("Warning: Failed to write corrupted CRC PNG: %v", err)
+		}
+	}
+}
+
+func createTruncatedPNG() {
+	// Create a truncated PNG for error testing
+	sourceFile := filepath.Join(testDataDir, "basic_copy.png")
+	targetFile := filepath.Join(testDataDir, "truncated.png")
+	
+	data, err := os.ReadFile(sourceFile)
+	if err != nil {
+		log.Printf("Warning: Failed to read source file for truncated PNG: %v", err)
+		return
+	}
+	
+	// Truncate the file in the middle of a chunk
+	if len(data) > 100 {
+		truncated := data[:len(data)-50] // Remove last 50 bytes
+		
+		if err := os.WriteFile(targetFile, truncated, 0644); err != nil {
+			log.Printf("Warning: Failed to write truncated PNG: %v", err)
+		}
+	}
+}
+
+func writeChunkToBytes(chunkType string, data []byte) []byte {
+	result := make([]byte, 0, 12+len(data))
+	
+	// Length
+	length := make([]byte, 4)
+	binary.BigEndian.PutUint32(length, uint32(len(data)))
+	result = append(result, length...)
+	
+	// Type
+	result = append(result, []byte(chunkType)...)
+	
+	// Data
+	result = append(result, data...)
+	
+	// CRC
+	crcData := append([]byte(chunkType), data...)
+	crc := crc32.ChecksumIEEE(crcData)
+	crcBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(crcBytes, crc)
+	result = append(result, crcBytes...)
+	
+	return result
 }

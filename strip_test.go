@@ -57,6 +57,16 @@ func TestPngMetaWebStrip(t *testing.T) {
 		{"Preserve significant bits", "with_significant_bits.png", false, ""},
 		{"Remove all removable", "with_all_removable.png", true, "multiple"},
 		{"Mixed chunks", "with_mixed_chunks.png", true, "mixed"},
+		{"zTXt chunks", "ztxt_chunks.png", true, "text"},
+		{"Large text chunk", "large_text_chunk.png", true, "text"},
+		{"Comprehensive ancillary", "comprehensive_ancillary.png", true, "multiple"},
+		{"Private chunks", "private_chunks.png", true, "other"},
+		{"Interlaced", "interlaced.png", false, ""},
+		{"High bit depth", "high_bit_depth.png", false, ""},
+		{"Edge case small", "edge_case_small.png", false, ""},
+		{"All essential chunks", "all_essential_chunks.png", false, ""},
+		{"Grayscale with transparency", "grayscale_with_transparency.png", false, ""},
+		{"Minimal IHDR only", "minimal_ihdr_only.png", false, ""},
 	}
 
 	for _, tt := range testFiles {
@@ -504,6 +514,195 @@ func TestImageChecksumVerification(t *testing.T) {
 	}
 
 	t.Logf("Checksum verification successful: %s", origChecksum)
+}
+
+// Test error cases specifically
+func TestErrorCases(t *testing.T) {
+	t.Run("Corrupted CRC", func(t *testing.T) {
+		path := filepath.Join("testdata", "corrupted_crc.png")
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Skip("Test file not found")
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("Failed to read test file: %v", err)
+		}
+
+		_, _, err = Strip(data)
+		if err == nil {
+			t.Error("Expected error for corrupted CRC")
+		}
+	})
+
+	t.Run("Truncated PNG", func(t *testing.T) {
+		path := filepath.Join("testdata", "truncated.png")
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Skip("Test file not found")
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("Failed to read test file: %v", err)
+		}
+
+		_, _, err = Strip(data)
+		if err == nil {
+			t.Error("Expected error for truncated PNG")
+		}
+	})
+}
+
+// Test individual functions for better coverage
+func TestShouldKeepChunk(t *testing.T) {
+	tests := []struct {
+		chunkType string
+		expected  bool
+	}{
+		{"IHDR", true},
+		{"PLTE", true},
+		{"IDAT", true},
+		{"IEND", true},
+		{"tRNS", true},
+		{"gAMA", true},
+		{"cHRM", true},
+		{"sRGB", true},
+		{"iCCP", true},
+		{"sBIT", true},
+		{"pHYs", true},
+		{"tEXt", false},
+		{"zTXt", false},
+		{"iTXt", false},
+		{"tIME", false},
+		{"bKGD", false},
+		{"eXIf", false},
+		{"hIST", false},
+		{"sPLT", false},
+		{"prIV", false},
+		{"unkn", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.chunkType, func(t *testing.T) {
+			result := shouldKeepChunk(tt.chunkType)
+			if result != tt.expected {
+				t.Errorf("shouldKeepChunk(%s) = %v, want %v", tt.chunkType, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestTrackRemovedChunk(t *testing.T) {
+	result := &Result{}
+
+	// Test text chunk tracking
+	trackRemovedChunk(result, "tEXt", 100)
+	if result.Removed.TextChunks != 100 {
+		t.Errorf("Expected TextChunks = 100, got %d", result.Removed.TextChunks)
+	}
+
+	trackRemovedChunk(result, "zTXt", 50)
+	if result.Removed.TextChunks != 150 {
+		t.Errorf("Expected TextChunks = 150, got %d", result.Removed.TextChunks)
+	}
+
+	trackRemovedChunk(result, "iTXt", 25)
+	if result.Removed.TextChunks != 175 {
+		t.Errorf("Expected TextChunks = 175, got %d", result.Removed.TextChunks)
+	}
+
+	// Test time chunk tracking
+	trackRemovedChunk(result, "tIME", 30)
+	if result.Removed.TimeChunk != 30 {
+		t.Errorf("Expected TimeChunk = 30, got %d", result.Removed.TimeChunk)
+	}
+
+	// Test background chunk tracking
+	trackRemovedChunk(result, "bKGD", 40)
+	if result.Removed.Background != 40 {
+		t.Errorf("Expected Background = 40, got %d", result.Removed.Background)
+	}
+
+	// Test EXIF tracking
+	trackRemovedChunk(result, "eXIf", 200)
+	if result.Removed.ExifData != 200 {
+		t.Errorf("Expected ExifData = 200, got %d", result.Removed.ExifData)
+	}
+
+	// Test other chunks tracking
+	trackRemovedChunk(result, "hIST", 60)
+	if result.Removed.OtherChunks != 60 {
+		t.Errorf("Expected OtherChunks = 60, got %d", result.Removed.OtherChunks)
+	}
+
+	trackRemovedChunk(result, "sPLT", 70)
+	if result.Removed.OtherChunks != 130 {
+		t.Errorf("Expected OtherChunks = 130, got %d", result.Removed.OtherChunks)
+	}
+
+	// Test total calculation
+	expectedTotal := 175 + 30 + 40 + 200 + 130 // 575
+	if result.Total != expectedTotal {
+		t.Errorf("Expected Total = %d, got %d", expectedTotal, result.Total)
+	}
+}
+
+// Test reading/writing functions with edge cases
+func TestReaderWriterEdgeCases(t *testing.T) {
+	t.Run("Reader with no data", func(t *testing.T) {
+		reader := bytes.NewReader([]byte{})
+		_, _, err := PngMetaWebStripReader(reader)
+		if err == nil {
+			t.Error("Expected error for empty reader")
+		}
+	})
+
+	t.Run("Writer with failing writer", func(t *testing.T) {
+		// Create a simple PNG data
+		img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err != nil {
+			t.Fatalf("Failed to create test PNG: %v", err)
+		}
+		
+		// Create a writer that always fails
+		failingWriter := &failingWriter{}
+		_, err := PngMetaWebStripWriter(buf.Bytes(), failingWriter)
+		if err == nil {
+			t.Error("Expected error for failing writer")
+		}
+	})
+}
+
+// Helper struct for testing writer errors
+type failingWriter struct{}
+
+func (fw *failingWriter) Write(p []byte) (int, error) {
+	return 0, fmt.Errorf("writer intentionally fails")
+}
+
+// Test function coverage with benchmarks
+func BenchmarkShouldKeepChunk(b *testing.B) {
+	chunks := []string{"IHDR", "tEXt", "gAMA", "bKGD", "IDAT", "IEND"}
+	b.ResetTimer()
+	
+	for i := 0; i < b.N; i++ {
+		for _, chunk := range chunks {
+			shouldKeepChunk(chunk)
+		}
+	}
+}
+
+func BenchmarkTrackRemovedChunk(b *testing.B) {
+	result := &Result{}
+	chunks := []string{"tEXt", "tIME", "bKGD", "eXIf", "hIST"}
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, chunk := range chunks {
+			trackRemovedChunk(result, chunk, 100)
+		}
+	}
 }
 
 // Test to ensure README examples work
